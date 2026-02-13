@@ -1,0 +1,8 @@
+# --- CRITICAL CONSTRAINTS ---
+# We must pin numpy < 2.0 to prevent "binary incompatibility"
+# with the system's picamera2 library.
+numpy<2.0
+opencv-python-headless
+
+# --- AI LIBRARIES ---
+tflite-runtime
