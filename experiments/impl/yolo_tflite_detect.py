@@ -53,7 +53,7 @@ class YOLOTFLite:  # noqa: D101 – user-provided class, kept verbatim
         self.iou_thres = iou_thres
 
         # Load interpreter + allocate tensors
-        self.interpreter = tflite.Interpreter(model_path=str(model_path))
+        self.interpreter = tflite.Interpreter(model_path=str(model_path), num_threads=4)
         self.interpreter.allocate_tensors()
 
         # Cache tensor meta-data – assuming single-input single-output model

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Tuple, List
 import os
 import json
+import time
 
 import cv2  # type: ignore
 import numpy as np  # type: ignore
@@ -61,7 +62,9 @@ class MobileNetSSDTFLite:
         self.conf_thres = conf_thres
 
         # Load interpreter
-        self.interpreter = tflite.Interpreter(model_path=str(model_path))
+        self.interpreter = tflite.Interpreter(
+            model_path=str(model_path), num_threads=4
+        )
         self.interpreter.allocate_tensors()
 
         self.input_details = self.interpreter.get_input_details()
@@ -157,8 +160,8 @@ class MobileNetSSDTFLite:
             w = int((xmax - xmin) * img_w)
             h = int((ymax - ymin) * img_h)
             # COCO SSD classes are 1-indexed; our labelmap is 0-indexed
-            cid = int(class_ids[i])
-            results.append({"box": [x, y, w, h], "conf": score, "class_id": cid})
+            cid = int(class_ids[i]) - 1
+            results.append({"box": [x, y, w, h], "conf": score, "class_id": cid, "label": self.labelmap.get(cid, str(cid))})
 
         return results
 
@@ -211,6 +214,9 @@ class MobilenetDetect(BaseExperiment):
             model_path, labelmap_path, conf_thres=self.conf_thres
         )
         self.frame_idx = 0
+        self.total_infer_time = 0.0
+        self.total_imwrite_time = 0.0
+        self.exp_start_time = None
 
         self.output_dir = Path(output_dir or f"output/{self.NAME}")
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -235,8 +241,19 @@ class MobilenetDetect(BaseExperiment):
     # ------------------------------------------------------------------
     def process_image(self, image: np.ndarray) -> None:
         """Run the MobileNet SSD detector, draw results, and save frame."""
+        if self.exp_start_time is None:
+            self.exp_start_time = time.monotonic()
+
+        t0 = time.monotonic()
         results = self.detector.predict(image)
-        print(f"Frame {self.frame_idx}: {len(results)} detections")
+        t_infer = time.monotonic() - t0
+        self.total_infer_time += t_infer
+
+        print(
+            f"Frame {self.frame_idx}: {len(results)} det, "
+            f"infer={t_infer*1000:.0f}ms",
+            end="",
+        )
 
         frame = image.copy()
         for det in results:
@@ -249,6 +266,25 @@ class MobilenetDetect(BaseExperiment):
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2,
             )
 
+        t0 = time.monotonic()
         fname = self.output_dir / f"{self.frame_idx:06d}.jpg"
         cv2.imwrite(str(fname), frame)
+        t_write = time.monotonic() - t0
+        self.total_imwrite_time += t_write
+
+        print(f", imwrite={t_write*1000:.0f}ms")
         self.frame_idx += 1
+
+    def unconfigure_camera(self) -> None:
+        """Print timing summary and release camera."""
+        elapsed = time.monotonic() - (self.exp_start_time or time.monotonic())
+        n = max(self.frame_idx, 1)
+        avg_hz = n / elapsed if elapsed > 0 else 0
+        print("\n===== Timing Summary =====")
+        print(f"Frames processed:  {n}")
+        print(f"Elapsed time:      {elapsed:.1f}s")
+        print(f"Avg inference:     {self.total_infer_time/n*1000:.0f}ms")
+        print(f"Avg imwrite:       {self.total_imwrite_time/n*1000:.0f}ms")
+        print(f"Average Hz:        {avg_hz:.2f}")
+        print("==========================")
+        super().unconfigure_camera()

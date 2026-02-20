@@ -1,0 +1,32 @@
+# =============================================================
+# docker compose up        – start interactive shell
+# docker compose run powerdraw python3 scripts/run_yolo_tflite_detect.py ...
+# =============================================================
+services:
+  powerdraw:
+    build: .
+    image: rbpi-powerdraw:humble
+    container_name: powerdraw
+
+    # Grant access to the Pi camera and GPU
+    privileged: true
+    volumes:
+      # Mount project source live so edits are reflected instantly
+      # - ./models:/app/models
+      # - ./experiments:/app/experiments
+      # - ./scripts:/app/scripts
+      - ./ros2_ws:/app/ros2_ws
+      # Persist experiment output on the host
+      - ./output:/app/output
+      # Camera device access (V4L2 / libcamera)
+      - /run/udev:/run/udev:ro
+    devices:
+      - /dev/video50:/dev/video50
+      - /dev/vchiq:/dev/vchiq
+
+    # Use host network so ROS 2 DDS discovery works out of the box
+    network_mode: host
+
+    # Keep STDIN open for interactive use
+    stdin_open: true
+    tty: true

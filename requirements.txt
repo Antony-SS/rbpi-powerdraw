@@ -3,6 +3,7 @@
 # with the system's picamera2 library.
 numpy<2.0
 opencv-python-headless
+picamera2
 
 # --- AI LIBRARIES ---
 tflite-runtime
